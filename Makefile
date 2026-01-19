@@ -13,6 +13,7 @@ deps:
 	go install github.com/wailsapp/wails/v2/cmd/wails@latest
 	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.8.0
 	go install mvdan.cc/gofumpt@latest
+	go install golang.org/x/tools/cmd/goimports@latest
 	go install github.com/evilmartians/lefthook@latest
 
 	@echo " > Setting up git hooks..."
@@ -28,6 +29,7 @@ run:
 format:
 	@echo " > Formatting code..."
 	gofumpt -w .
+	goimports -w -local github.com/zenkiet/window-service-watcher .
 
 lint:
 	@echo " > Linting..."
