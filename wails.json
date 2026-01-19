@@ -1,0 +1,13 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "window-service-watcher",
+  "outputfilename": "window-service-watcher",
+  "frontend:install": "bun",
+  "frontend:build": "bun run build",
+  "frontend:dev:watcher": "bun run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "Zen Kiet",
+    "email": "kietgolx65234@gmail.com"
+  }
+}
