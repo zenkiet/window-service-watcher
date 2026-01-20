@@ -4,11 +4,10 @@ import (
 	"context"
 	"window-service-watcher/internal/domain"
 
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 type App struct {
-	ctx     context.Context
 	manager domain.ServiceManager
 }
 
@@ -18,13 +17,13 @@ func NewApp(mgr domain.ServiceManager) *App {
 	}
 }
 
-func (a *App) Startup(ctx context.Context) {
-	a.ctx = ctx
-
+func (a *App) OnStartup(ctx context.Context, options application.ServiceOptions) error {
 	err := a.manager.Connect()
 	if err != nil {
-		wailsRuntime.LogError(a.ctx, "Failed to connect to service manager: "+err.Error())
+		application.Get().Logger.Error("Failed to connect to service manager: " + err.Error())
+		return err
 	}
+	return nil
 }
 
 func (a *App) Shutdown(ctx context.Context) {
@@ -34,7 +33,7 @@ func (a *App) Shutdown(ctx context.Context) {
 func (a *App) GetServiceStatus() (domain.ServiceStatus, error) {
 	status, err := a.manager.CheckStatus()
 	if err != nil {
-		wailsRuntime.LogError(a.ctx, "Check Status Error: "+err.Error())
+		application.Get().Logger.Error("Check Status Error: " + err.Error())
 		return domain.ServiceStatus{
 			Status:    "Error",
 			IsHealthy: false,
@@ -45,8 +44,8 @@ func (a *App) GetServiceStatus() (domain.ServiceStatus, error) {
 
 func (a *App) WatchLogs(filePath string) {
 	a.manager.StartLogWatcher(filePath, func(line string) {
-		wailsRuntime.EventsEmit(a.ctx, "new-log", line)
+		application.Get().Event.Emit("new-log", line)
 	}, func(err error) {
-		wailsRuntime.EventsEmit(a.ctx, "log-error", err.Error())
+		application.Get().Event.Emit("log-error", err.Error())
 	})
 }

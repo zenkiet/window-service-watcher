@@ -1,12 +1,13 @@
-import tailwindcss from '@tailwindcss/vite';
-import { sveltekit } from '@sveltejs/kit/vite';
-import { defineConfig } from 'vite';
+import tailwindcss from "@tailwindcss/vite";
+import { sveltekit } from "@sveltejs/kit/vite";
+import { defineConfig } from "vite";
+import wails from "@wailsio/runtime/plugins/vite";
 
 export default defineConfig({
-	plugins: [tailwindcss(), sveltekit()],
-	server: {
-		fs: {
-			allow: ['./wailsjs/go/app/App.js', './wailsjs/runtime/runtime.js']
-		}
-	}
+  plugins: [tailwindcss(), sveltekit(), wails("./bindings")],
+  server: {
+    fs: {
+      allow: ["./bindings"],
+    },
+  },
 });

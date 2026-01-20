@@ -1,5 +1,3 @@
-APP_NAME=z-attendance
-
 GOBASE=$(shell pwd)
 GOBIN=$(GOBASE)/bin
 GOPATH=$(shell go env GOPATH)
@@ -10,7 +8,7 @@ all: build
 
 deps:
 	@echo " > Installing dependencies..."
-	go install github.com/wailsapp/wails/v2/cmd/wails@latest
+	go install github.com/wailsapp/wails/v3/cmd/wails3@latest
 	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.8.0
 	go install mvdan.cc/gofumpt@latest
 	go install golang.org/x/tools/cmd/goimports@latest
@@ -19,9 +17,13 @@ deps:
 	@echo " > Setting up git hooks..."
 	lefthook install
 
-build:
+dev:
+	@echo " > Starting development server..."
+	wails3 dev
+
+build-window:
 	@echo " > Building on window"
-	wails build --platform windows/amd64 -nsis
+	wails3 build -platform windows/amd64 -nsis
 
 format:
 	@echo " > Formatting code..."

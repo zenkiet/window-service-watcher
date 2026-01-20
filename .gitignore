@@ -33,13 +33,9 @@ go.work.sum
 
 # Others
 .DS_Store
-/data
-/bin
-/binary
-/tmp
-
-build/bin
-node_modules
+.task
+bin
 frontend/dist
-
-.DS_Store
+frontend/node_modules
+build/linux/appimage/build
+build/windows/nsis/MicrosoftEdgeWebview2Setup.exe

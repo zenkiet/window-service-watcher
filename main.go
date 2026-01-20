@@ -2,63 +2,100 @@ package main
 
 import (
 	"embed"
-
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
-	"github.com/wailsapp/wails/v2/pkg/options/mac"
-	"github.com/wailsapp/wails/v2/pkg/options/windows"
-
+	_ "embed"
+	"log"
+	"time"
 	"window-service-watcher/internal/app"
 	"window-service-watcher/internal/service"
+
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
+
+// Wails uses Go's `embed` package to embed the frontend files into the binary.
+// Any files in the frontend/dist folder will be embedded into the binary and
+// made available to the frontend.
+// See https://pkg.go.dev/embed for more information.
 
 //go:embed all:frontend/dist
 var assets embed.FS
 
+func init() {
+	// Register a custom event whose associated data type is string.
+	// This is not required, but the binding generator will pick up registered events
+	// and provide a strongly typed JS/TS API for them.
+	application.RegisterEvent[string]("time")
+}
+
+// main function serves as the application's entry point. It initializes the application, creates a window,
+// and starts a goroutine that emits a time-based event every second. It subsequently runs the application and
+// logs any error that might occur.
 func main() {
 	srvMgr := service.NewManager()
-
 	a := app.NewApp(srvMgr)
 
-	// Create application with options
-	err := wails.Run(&options.App{
-		Title:       "Zen Service Watcher",
-		Width:       320,
-		Height:      80,
-		Frameless:   true,
-		AlwaysOnTop: true,
-		AssetServer: &assetserver.Options{
-			Assets: assets,
+	// Create a new Wails application by providing the necessary options.
+	// Variables 'Name' and 'Description' are for application metadata.
+	// 'Assets' configures the asset server with the 'FS' variable pointing to the frontend files.
+	// 'Bind' is a list of Go struct instances. The frontend has access to the methods of these instances.
+	// 'Mac' options tailor the application when running an macOS.
+	app := application.New(application.Options{
+		Name:        "Zen Service Manager",
+		Description: "A simple service manager built with Wails",
+		Services: []application.Service{
+			application.NewService(a),
 		},
-		WindowStartState: options.Minimised,
-		DisableResize:    true,
-		BackgroundColour: &options.RGBA{R: 0, G: 0, B: 0, A: 0},
-		OnStartup:        a.Startup,
-		OnShutdown:       a.Shutdown,
-		Bind: []interface{}{
-			a,
+		Assets: application.AssetOptions{
+			Handler: application.AssetFileServerFS(assets),
 		},
-		Windows: &windows.Options{
-			BackdropType:         windows.Mica,
-			WebviewIsTransparent: true,
-			WindowIsTranslucent:  true,
-			DisableWindowIcon:    true,
-			Theme:                windows.Dark,
-			ResizeDebounceMS:     200,
-		},
-		Mac: &mac.Options{
-			TitleBar:             mac.TitleBarHidden(),
-			Appearance:           mac.NSAppearanceNameDarkAqua,
-			WebviewIsTransparent: true,
-			WindowIsTranslucent:  true,
-			About: &mac.AboutInfo{
-				Title:   "Zen Service Watcher",
-				Message: "Monitor your POS services",
-			},
+		Mac: application.MacOptions{
+			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
 	})
+
+	// Create a new window with the necessary options.
+	// 'Title' is the title of the window.
+	// 'Mac' options tailor the window when running on macOS.
+	// 'BackgroundColour' is the background colour of the window.
+	// 'URL' is the URL that will be loaded into the webview.
+	app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Title: "Zen Service Watcher",
+		// Width:  320,
+		// Height: 80,
+		// Frameless:      true,
+		DisableResize:  true,
+		BackgroundType: application.BackgroundTypeTranslucent,
+		Mac: application.MacWindow{
+			InvisibleTitleBarHeight: 50,
+			Backdrop:                application.MacBackdropTranslucent,
+			TitleBar:                application.MacTitleBarHiddenInset,
+		},
+		Windows: application.WindowsWindow{
+			Theme:                   application.Dark,
+			BackdropType:            application.Mica,
+			WindowMaskDraggable:     true,
+			ResizeDebounceMS:        200,
+			WindowDidMoveDebounceMS: 200,
+		},
+		Linux:            application.LinuxWindow{},
+		BackgroundColour: application.NewRGB(27, 38, 54),
+		URL:              "/",
+	})
+
+	// Create a goroutine that emits an event containing the current time every second.
+	// The frontend can listen to this event and update the UI accordingly.
+	go func() {
+		for {
+			now := time.Now().Format(time.RFC1123)
+			app.Event.Emit("time", now)
+			time.Sleep(time.Second)
+		}
+	}()
+
+	// Run the application. This blocks until the application has been exited.
+	err := app.Run()
+
+	// If an error occurred while running the application, log it and exit.
 	if err != nil {
-		println("Error:", err.Error())
+		log.Fatal(err)
 	}
 }
