@@ -7,8 +7,6 @@ import (
 	"sync"
 
 	"window-service-watcher/internal/domain"
-
-	"github.com/nxadm/tail"
 )
 
 type MockManager struct {
@@ -16,60 +14,71 @@ type MockManager struct {
 	logMutex  sync.Mutex
 }
 
+// GetServiceState implements [domain.ServiceManager].
+func (m *MockManager) GetServiceState(serviceName string) (string, bool, error) {
+	return "Running", true, nil
+}
+
+// RestartService implements [domain.ServiceManager].
+func (m *MockManager) RestartService(serviceName string) error {
+	panic("unimplemented")
+}
+
+// StartService implements [domain.ServiceManager].
+func (m *MockManager) StartService(serviceName string) error {
+	panic("unimplemented")
+}
+
+// StopService implements [domain.ServiceManager].
+func (m *MockManager) StopService(serviceName string) error {
+	panic("unimplemented")
+}
+
 // StartLogWatcher implements [domain.ServiceManager].
-func (m *MockManager) StartLogWatcher(filePath string, onLog func(string), onError func(error)) {
-	if filePath == "" {
-		return
-	}
+// func (m *MockManager) StartLogWatcher(filePath string, onLog func(string), onError func(error)) {
+// 	if filePath == "" {
+// 		return
+// 	}
 
-	m.StopLogWatcher()
-	ctx, cancel := context.WithCancel(context.Background())
+// 	m.StopLogWatcher()
+// 	ctx, cancel := context.WithCancel(context.Background())
 
-	m.logMutex.Lock()
-	m.logCancel = cancel
-	m.logMutex.Unlock()
+// 	m.logMutex.Lock()
+// 	m.logCancel = cancel
+// 	m.logMutex.Unlock()
 
-	go func(ctx context.Context) {
-		t, err := tail.TailFile(filePath, tail.Config{
-			Follow: true,
-			ReOpen: true,
-			Poll:   true, // window often use polling
-		})
-		if err != nil {
-			onError(err)
-			return
-		}
-		defer func() {
-			t.Cleanup()
-			t.Stop()
-		}()
+// 	go func(ctx context.Context) {
+// 		t, err := tail.TailFile(filePath, tail.Config{
+// 			Follow: true,
+// 			ReOpen: true,
+// 			Poll:   true, // window often use polling
+// 		})
+// 		if err != nil {
+// 			onError(err)
+// 			return
+// 		}
+// 		defer func() {
+// 			t.Cleanup()
+// 			t.Stop()
+// 		}()
 
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case line, ok := <-t.Lines:
-				if !ok {
-					return
-				}
-				if line.Err != nil {
-					onError(line.Err)
-					continue
-				}
-				onLog(line.Text)
-			}
-		}
-	}(ctx)
-}
-
-// CheckStatus implements [domain.ServiceManager].
-func (m *MockManager) CheckStatus() (domain.ServiceStatus, error) {
-	return domain.ServiceStatus{
-		Name:      "MockService",
-		Status:    "Running",
-		IsHealthy: true,
-	}, nil
-}
+// 		for {
+// 			select {
+// 			case <-ctx.Done():
+// 				return
+// 			case line, ok := <-t.Lines:
+// 				if !ok {
+// 					return
+// 				}
+// 				if line.Err != nil {
+// 					onError(line.Err)
+// 					continue
+// 				}
+// 				onLog(line.Text)
+// 			}
+// 		}
+// 	}(ctx)
+// }
 
 // Connect implements [domain.ServiceManager].
 func (m *MockManager) Connect() error {

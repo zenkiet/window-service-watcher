@@ -6,12 +6,51 @@
 // @ts-ignore: Unused imports
 import { Create as $Create } from "@wailsio/runtime";
 
-export class ServiceStatus {
+export class Config {
     /**
-     * Creates a new ServiceStatus instance.
-     * @param {Partial<ServiceStatus>} [$$source = {}] - The source object to create the ServiceStatus.
+     * Creates a new Config instance.
+     * @param {Partial<Config>} [$$source = {}] - The source object to create the Config.
      */
     constructor($$source = {}) {
+        if (!("Services" in $$source)) {
+            /**
+             * @member
+             * @type {ServiceConfig[]}
+             */
+            this["Services"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new Config instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {Config}
+     */
+    static createFrom($$source = {}) {
+        const $$createField0_0 = $$createType1;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("Services" in $$parsedSource) {
+            $$parsedSource["Services"] = $$createField0_0($$parsedSource["Services"]);
+        }
+        return new Config(/** @type {Partial<Config>} */($$parsedSource));
+    }
+}
+
+export class ServiceConfig {
+    /**
+     * Creates a new ServiceConfig instance.
+     * @param {Partial<ServiceConfig>} [$$source = {}] - The source object to create the ServiceConfig.
+     */
+    constructor($$source = {}) {
+        if (!("id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["id"] = "";
+        }
         if (!("name" in $$source)) {
             /**
              * @member
@@ -19,31 +58,42 @@ export class ServiceStatus {
              */
             this["name"] = "";
         }
-        if (!("status" in $$source)) {
+        if (!("description" in $$source)) {
             /**
              * @member
              * @type {string}
              */
-            this["status"] = "";
+            this["description"] = "";
         }
-        if (!("is_healthy" in $$source)) {
+        if (!("service_name" in $$source)) {
             /**
              * @member
-             * @type {boolean}
+             * @type {string}
              */
-            this["is_healthy"] = false;
+            this["service_name"] = "";
+        }
+        if (!("log_path" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["log_path"] = "";
         }
 
         Object.assign(this, $$source);
     }
 
     /**
-     * Creates a new ServiceStatus instance from a string or object.
+     * Creates a new ServiceConfig instance from a string or object.
      * @param {any} [$$source = {}]
-     * @returns {ServiceStatus}
+     * @returns {ServiceConfig}
      */
     static createFrom($$source = {}) {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new ServiceStatus(/** @type {Partial<ServiceStatus>} */($$parsedSource));
+        return new ServiceConfig(/** @type {Partial<ServiceConfig>} */($$parsedSource));
     }
 }
+
+// Private type creation functions
+const $$createType0 = ServiceConfig.createFrom;
+const $$createType1 = $Create.Array($$createType0);

@@ -1,0 +1,12 @@
+services:
+  - id: 1
+    name: "Blogic Report Service"
+    description: "Generates and manages reports for Blogic applications."
+    service_name: "BlogicReportService"
+    log_path: "C:\\ProgramData\\Blogic\\logs\\report.log"
+
+  - id: 2
+    name: "Windows Print Spooler"
+    description: "Manages print jobs and handles interaction with the printer."
+    service_name: "Spooler"
+    log_path: ""

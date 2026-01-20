@@ -14,10 +14,10 @@ import * as application$0 from "../../../github.com/wailsapp/wails/v3/pkg/applic
 import * as domain$0 from "../domain/models.js";
 
 /**
- * @returns {$CancellablePromise<domain$0.ServiceStatus>}
+ * @returns {$CancellablePromise<domain$0.Config>}
  */
-export function GetServiceStatus() {
-    return $Call.ByID(4058905530).then(/** @type {($result: any) => any} */(($result) => {
+export function GetConfig() {
+    return $Call.ByID(1921182139).then(/** @type {($result: any) => any} */(($result) => {
         return $$createType0($result);
     }));
 }
@@ -31,6 +31,14 @@ export function OnStartup(options) {
 }
 
 /**
+ * @param {string} id
+ * @returns {$CancellablePromise<void>}
+ */
+export function RestartService(id) {
+    return $Call.ByID(1495361373, id);
+}
+
+/**
  * @returns {$CancellablePromise<void>}
  */
 export function Shutdown() {
@@ -38,12 +46,20 @@ export function Shutdown() {
 }
 
 /**
- * @param {string} filePath
+ * @param {string} id
  * @returns {$CancellablePromise<void>}
  */
-export function WatchLogs(filePath) {
-    return $Call.ByID(927011949, filePath);
+export function StartService(id) {
+    return $Call.ByID(3856488036, id);
+}
+
+/**
+ * @param {string} id
+ * @returns {$CancellablePromise<void>}
+ */
+export function StopService(id) {
+    return $Call.ByID(645239674, id);
 }
 
 // Private type creation functions
-const $$createType0 = domain$0.ServiceStatus.createFrom;
+const $$createType0 = domain$0.Config.createFrom;

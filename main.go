@@ -2,13 +2,15 @@ package main
 
 import (
 	"embed"
-	_ "embed"
 	"log"
+	"os"
 	"time"
 	"window-service-watcher/internal/app"
+	"window-service-watcher/internal/domain"
 	"window-service-watcher/internal/service"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"go.yaml.in/yaml/v3"
 )
 
 // Wails uses Go's `embed` package to embed the frontend files into the binary.
@@ -30,8 +32,17 @@ func init() {
 // and starts a goroutine that emits a time-based event every second. It subsequently runs the application and
 // logs any error that might occur.
 func main() {
+	cfgData, err := os.ReadFile("config.yaml")
+	if err != nil {
+		log.Fatalf("error reading config: %v", err)
+	}
+	var config domain.Config
+	if err := yaml.Unmarshal(cfgData, &config); err != nil {
+		log.Fatalf("error unmarshaling config: %v", err)
+	}
+
 	srvMgr := service.NewManager()
-	a := app.NewApp(srvMgr)
+	myApp := app.NewApp(config, srvMgr)
 
 	// Create a new Wails application by providing the necessary options.
 	// Variables 'Name' and 'Description' are for application metadata.
@@ -42,7 +53,7 @@ func main() {
 		Name:        "Zen Service Manager",
 		Description: "A simple service manager built with Wails",
 		Services: []application.Service{
-			application.NewService(a),
+			application.NewService(myApp),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
@@ -50,6 +61,7 @@ func main() {
 		Mac: application.MacOptions{
 			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
+		Windows: application.WindowsOptions{},
 	})
 
 	// Create a new window with the necessary options.
@@ -58,10 +70,7 @@ func main() {
 	// 'BackgroundColour' is the background colour of the window.
 	// 'URL' is the URL that will be loaded into the webview.
 	app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title: "Zen Service Watcher",
-		// Width:  320,
-		// Height: 80,
-		// Frameless:      true,
+		Title:          "Zen Service Watcher",
 		DisableResize:  true,
 		BackgroundType: application.BackgroundTypeTranslucent,
 		Mac: application.MacWindow{
@@ -92,8 +101,7 @@ func main() {
 	}()
 
 	// Run the application. This blocks until the application has been exited.
-	err := app.Run()
-
+	err = app.Run()
 	// If an error occurred while running the application, log it and exit.
 	if err != nil {
 		log.Fatal(err)

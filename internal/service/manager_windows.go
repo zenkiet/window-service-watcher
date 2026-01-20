@@ -1,53 +1,54 @@
 //go:build windows
 
-package service
+package windows
 
 import (
-	"context"
 	"fmt"
-	"sync"
-
 	"window-service-watcher/internal/domain"
 
-	"github.com/nxadm/tail"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/svc/mgr"
 )
 
 type WindowsManager struct {
-	ServiceName string
-	mgr         *mgr.Mgr
-	logCancel   context.CancelFunc
-	logMutex    sync.Mutex
+	mgr *mgr.Mgr
 }
 
 // CheckStatus implements [domain.ServiceManager].
 func (w *WindowsManager) CheckStatus() (domain.ServiceStatus, error) {
+	panic("unimplemented")
+}
+
+// Connect implements [domain.ServiceManager].
+func (w *WindowsManager) Connect() error {
+	panic("unimplemented")
+}
+
+// Disconnect implements [domain.ServiceManager].
+func (w *WindowsManager) Disconnect() error {
+	panic("unimplemented")
+}
+
+// GetServiceState implements [domain.ServiceManager].
+func (w *WindowsManager) GetServiceState(serviceName string) (string, bool, error) {
 	if w.mgr == nil {
-		return domain.ServiceStatus{Status: "Manager Disconnected"}, fmt.Errorf("service manager not connected")
+		return "Disconnected", false, fmt.Errorf("service manager not connected")
 	}
 
-	s, err := w.mgr.OpenService(w.ServiceName)
+	s, err := w.mgr.OpenService(serviceName)
 	if err != nil {
-		return domain.ServiceStatus{
-			Name:      w.ServiceName,
-			Status:    "Not Installed",
-			IsHealthy: false,
-		}, nil
+		return "Not Found", false, fmt.Errorf("service not found: %w", err)
 	}
 	defer s.Close()
 
 	status, err := s.Query()
 	if err != nil {
-		return domain.ServiceStatus{
-			Name:      w.ServiceName,
-			Status:    "Error Querying Status",
-			IsHealthy: false,
-		}, nil
+		return "Unknown", false, fmt.Errorf("error querying service status: %w", err)
 	}
 
-	var state string
+	state := "Unknown"
 	isHealthy := false
+
 	switch status.State {
 	case windows.SERVICE_STOPPED:
 		state = "Stopped"
@@ -68,93 +69,59 @@ func (w *WindowsManager) CheckStatus() (domain.ServiceStatus, error) {
 		state = "Unknown"
 	}
 
-	return domain.ServiceStatus{
-		Name:      w.ServiceName,
-		Status:    state,
-		IsHealthy: isHealthy,
-	}, nil
+	return state, isHealthy, nil
 }
 
-// Connect implements [domain.ServiceManager].
-func (w *WindowsManager) Connect() error {
-	m, error := mgr.Connect()
-	if error != nil {
-		return error
+// RestartService implements [domain.ServiceManager].
+func (w *WindowsManager) RestartService(serviceName string) error {
+	err := w.StopService(serviceName)
+	if err != nil {
+		return fmt.Errorf("could not stop service: %w", err)
 	}
-	w.mgr = m
-	return nil
-}
-
-// Disconnect implements [domain.ServiceManager].
-func (w *WindowsManager) Disconnect() error {
-	w.StopLogWatcher()
-	if w.mgr != nil {
-		return w.mgr.Disconnect()
+	err = w.StartService(serviceName)
+	if err != nil {
+		return fmt.Errorf("could not start service: %w", err)
 	}
 	return nil
 }
 
 // StartLogWatcher implements [domain.ServiceManager].
 func (w *WindowsManager) StartLogWatcher(filePath string, onLog func(string), onError func(error)) {
-	if filePath == "" {
-		return
+	panic("unimplemented")
+}
+
+// StartService implements [domain.ServiceManager].
+func (w *WindowsManager) StartService(serviceName string) error {
+	s, err := w.mgr.OpenService(serviceName)
+	if err != nil {
+		return fmt.Errorf("could not access service: %w", err)
 	}
-
-	w.StopLogWatcher()
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	w.logMutex.Lock()
-	w.logCancel = cancel
-	w.logMutex.Unlock()
-
-	go func(ctx context.Context) {
-		t, err := tail.TailFile(filePath, tail.Config{
-			Follow: true,
-			ReOpen: true,
-			Poll:   true, // window often use polling
-			Logger: tail.DiscardingLogger,
-		})
-		if err != nil {
-			onError(err)
-			return
-		}
-		defer func() {
-			t.Cleanup()
-			t.Stop()
-		}()
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case line, ok := <-t.Lines:
-				if !ok {
-					return
-				}
-				if line.Err != nil {
-					onError(line.Err)
-					continue
-				}
-				onLog(line.Text)
-			}
-		}
-	}(ctx)
+	defer s.Close()
+	return s.Start()
 }
 
 // StopLogWatcher implements [domain.ServiceManager].
 func (w *WindowsManager) StopLogWatcher() {
-	w.logMutex.Lock()
-	defer w.logMutex.Unlock()
+	panic("unimplemented")
+}
 
-	if w.logCancel != nil {
-		w.logCancel()
-		w.logCancel = nil
+// StopService implements [domain.ServiceManager].
+func (w *WindowsManager) StopService(serviceName string) error {
+	s, err := w.mgr.OpenService(serviceName)
+	if err != nil {
+		return fmt.Errorf("could not access service: %w", err)
 	}
+	defer s.Close()
+	status, err := s.Control(windows.SERVICE_CONTROL_STOP)
+	if err != nil {
+		return fmt.Errorf("could not stop service: %w", err)
+	}
+	if status.State != windows.SERVICE_STOPPED {
+		return fmt.Errorf("service did not stop successfully, current state: %d", status.State)
+	}
+	return nil
 }
 
 func NewManager() domain.ServiceManager {
-	return &WindowsManager{
-		ServiceName: "BlogicReportService",
-	}
+	return &WindowsManager{}
 }
