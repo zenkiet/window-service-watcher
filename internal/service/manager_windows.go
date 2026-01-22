@@ -4,26 +4,32 @@ package service
 
 import (
 	"fmt"
+	"sync"
+	"unsafe"
 	"window-service-watcher/internal/domain"
 
+	"github.com/shirou/gopsutil/v4/process"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/svc/mgr"
 )
 
-type WindowsManager struct {
-	mgr *mgr.Mgr
+type processHandle struct {
+	proc *process.Process
 }
 
-// CheckStatus implements [domain.ServiceManager].
-// func (w *WindowsManager) CheckStatus() (domain.ServiceStatus, error) {
-// }
+type WindowsManager struct {
+	mgr          *mgr.Mgr
+	mu           sync.RWMutex
+	processCache map[string]*processHandle
+}
 
 // Connect implements [domain.ServiceManager].
 func (w *WindowsManager) Connect() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	if w.mgr != nil {
 		return nil
 	}
-
 	m, err := mgr.Connect()
 	if err != nil {
 		return fmt.Errorf("failed to connect to service manager: %w", err)
@@ -34,101 +40,138 @@ func (w *WindowsManager) Connect() error {
 
 // Disconnect implements [domain.ServiceManager].
 func (w *WindowsManager) Disconnect() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	if w.mgr == nil {
 		return nil
 	}
-
 	err := w.mgr.Disconnect()
 	w.mgr = nil
+	w.processCache = make(map[string]*processHandle)
 	return err
 }
 
-// GetServiceState implements [domain.ServiceManager].
-func (w *WindowsManager) GetServiceState(serviceName string) (string, bool, error) {
-	if w.mgr == nil {
-		return "Disconnected", false, fmt.Errorf("service manager not connected")
+// GetServiceMetrics implements [domain.ServiceManager].
+func (w *WindowsManager) GetServiceMetrics(serviceName string) (*domain.ServiceMetrics, error) {
+	w.mu.RLock()
+	m := w.mgr
+	w.mu.RUnlock()
+
+	if m == nil {
+		return nil, fmt.Errorf("not connected")
 	}
 
-	s, err := w.mgr.OpenService(serviceName)
+	s, err := m.OpenService(serviceName)
 	if err != nil {
-		return "Not Found", false, fmt.Errorf("service not found: %w", err)
+		return nil, err
+	}
+	defer s.Close()
+
+	var status windows.SERVICE_STATUS_PROCESS
+	var bytesReturned uint32
+	err = windows.QueryServiceStatusEx(s.Handle, windows.SC_STATUS_PROCESS_INFO, (*byte)(unsafe.Pointer(&status)), uint32(unsafe.Sizeof(status)), &bytesReturned)
+	if err != nil {
+		return nil, err
+	}
+
+	if status.ProcessId == 0 {
+		w.mu.Lock()
+		delete(w.processCache, serviceName)
+		w.mu.Unlock()
+		return nil, nil
+	}
+
+	w.mu.Lock()
+	handle, ok := w.processCache[serviceName]
+	if !ok || handle.proc.Pid != int32(status.ProcessId) {
+		p, err := process.NewProcess(int32(status.ProcessId))
+		if err != nil {
+			w.mu.Unlock()
+			return nil, err
+		}
+		handle = &processHandle{proc: p}
+		w.processCache[serviceName] = handle
+	}
+	w.mu.Unlock()
+
+	metrics := &domain.ServiceMetrics{PID: status.ProcessId}
+
+	if cpu, err := handle.proc.CPUPercent(); err == nil {
+		metrics.CPUUsage = cpu
+	}
+
+	if mem, err := handle.proc.MemoryInfo(); err == nil {
+		metrics.MemUsage = mem.RSS
+	}
+
+	if metrics.CreateTime == 0 {
+		if createTime, err := handle.proc.CreateTime(); err == nil {
+			metrics.CreateTime = createTime
+		}
+	}
+
+	return metrics, nil
+}
+
+// GetServiceState implements [domain.ServiceManager].
+func (w *WindowsManager) GetServiceState(serviceName string) (domain.Status, error) {
+	w.mu.RLock()
+	m := w.mgr
+	w.mu.RUnlock()
+
+	if m == nil {
+		return domain.STOPPED, fmt.Errorf("not connected")
+	}
+
+	s, err := m.OpenService(serviceName)
+	if err != nil {
+		return domain.STOPPED, err
 	}
 	defer s.Close()
 
 	status, err := s.Query()
 	if err != nil {
-		return "Unknown", false, fmt.Errorf("error querying service status: %w", err)
+		return domain.STOPPED, err
 	}
 
-	state := "Unknown"
-	isHealthy := false
-
-	switch status.State {
-	case windows.SERVICE_STOPPED:
-		state = "Stopped"
-	case windows.SERVICE_START_PENDING:
-		state = "Starting"
-	case windows.SERVICE_STOP_PENDING:
-		state = "Stopping"
-	case windows.SERVICE_RUNNING:
-		state = "Running"
-		isHealthy = true
-	case windows.SERVICE_CONTINUE_PENDING:
-		state = "Resuming"
-	case windows.SERVICE_PAUSE_PENDING:
-		state = "Pausing"
-	case windows.SERVICE_PAUSED:
-		state = "Paused"
-	default:
-		state = "Unknown"
-	}
-
-	return state, isHealthy, nil
+	return domain.Status(status.State), nil
 }
-
-// StartLogWatcher implements [domain.ServiceManager].
-// func (w *WindowsManager) StartLogWatcher(filePath string, onLog func(string), onError func(error)) {
-// }
 
 // StartService implements [domain.ServiceManager].
 func (w *WindowsManager) StartService(serviceName string) error {
-	if w.mgr == nil {
-		return fmt.Errorf("service manager not connected")
+	w.mu.RLock()
+	m := w.mgr
+	w.mu.RUnlock()
+	if m == nil {
+		return fmt.Errorf("not connected")
 	}
-
-	s, err := w.mgr.OpenService(serviceName)
+	s, err := m.OpenService(serviceName)
 	if err != nil {
-		return fmt.Errorf("could not access service: %w", err)
+		return err
 	}
 	defer s.Close()
 	return s.Start()
 }
 
-// StopLogWatcher implements [domain.ServiceManager].
-// func (w *WindowsManager) StopLogWatcher() {
-// }
-
 // StopService implements [domain.ServiceManager].
 func (w *WindowsManager) StopService(serviceName string) error {
-	if w.mgr == nil {
-		return fmt.Errorf("service manager not connected")
+	w.mu.RLock()
+	m := w.mgr
+	w.mu.RUnlock()
+	if m == nil {
+		return fmt.Errorf("not connected")
 	}
-
-	s, err := w.mgr.OpenService(serviceName)
+	s, err := m.OpenService(serviceName)
 	if err != nil {
-		return fmt.Errorf("could not access service: %w", err)
+		return err
 	}
 	defer s.Close()
-	status, err := s.Control(windows.SERVICE_CONTROL_STOP)
-	if err != nil {
-		return fmt.Errorf("could not stop service: %w", err)
-	}
-	if status.State != windows.SERVICE_STOPPED {
-		return fmt.Errorf("service did not stop successfully, current state: %d", status.State)
-	}
-	return nil
+	_, err = s.Control(windows.SERVICE_CONTROL_STOP)
+	return err
 }
 
 func NewManager() domain.ServiceManager {
-	return &WindowsManager{}
+	return &WindowsManager{
+		processCache: make(map[string]*processHandle),
+	}
 }

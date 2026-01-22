@@ -5,143 +5,110 @@ import (
 	"log"
 	"log/slog"
 	"os"
-	"time"
+
+	"github.com/wailsapp/wails/v2"
+	"github.com/wailsapp/wails/v2/pkg/options"
+	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/mac"
+	"github.com/wailsapp/wails/v2/pkg/options/windows"
+	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+
 	"window-service-watcher/internal/app"
 	"window-service-watcher/internal/config"
 	"window-service-watcher/internal/service"
-
-	"github.com/wailsapp/wails/v3/pkg/application"
-	"github.com/wailsapp/wails/v3/pkg/events"
 )
-
-// Wails uses Go's `embed` package to embed the frontend files into the binary.
-// Any files in the frontend/dist folder will be embedded into the binary and
-// made available to the frontend.
-// See https://pkg.go.dev/embed for more information.
 
 //go:embed all:frontend/dist
 var assets embed.FS
 
-var trayIcon []byte
+const uniqueAppID = "com.zensoftware.zwatcher"
 
-func init() {
-	// Register a custom event whose associated data type is string.
-	// This is not required, but the binding generator will pick up registered events
-	// and provide a strongly typed JS/TS API for them.
-	application.RegisterEvent[string]("time")
-}
-
-// main function serves as the application's entry point. It initializes the application, creates a window,
-// and starts a goroutine that emits a time-based event every second. It subsequently runs the application and
-// logs any error that might occur.
 func main() {
+	// Set up log output for debugging
 	logFile, _ := os.OpenFile("app.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	log.SetOutput(logFile)
+	defer logFile.Close()
 
+	logger := slog.New(slog.NewJSONHandler(logFile, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	slog.SetDefault(logger)
+
+	// Load configuration
 	cfg, err := config.LoadConfig("config.yaml")
 	if err != nil {
-		log.Fatalf("error loading config: %v", err)
+		slog.Error("error loading config: %v", err)
+		os.Exit(1)
 	}
 
+	// Initialize
 	srvMgr := service.NewManager()
-	myApp := app.NewApp(*cfg, srvMgr)
+	a := app.NewApp(*cfg, srvMgr)
 
-	// Create a new Wails application by providing the necessary options.
-	// Variables 'Name' and 'Description' are for application metadata.
-	// 'Assets' configures the asset server with the 'FS' variable pointing to the frontend files.
-	// 'Bind' is a list of Go struct instances. The frontend has access to the methods of these instances.
-	// 'Mac' options tailor the application when running an macOS.
-	app := application.New(application.Options{
-		Name:        "Zen Service Manager",
-		Description: "A simple service manager built with Wails",
-		Services: []application.Service{
-			application.NewService(myApp),
+	// Create application menu
+	// appMenu := menu.NewMenu()
+	// fileMenu := appMenu.AddSubmenu("File")
+	// fileMenu.AddText("Open Dashboard", keys.CmdOrCtrl("o"), func(_ *menu.CallbackData) {
+	// 	wailsRuntime.WindowShow(a.Ctx)
+	// 	wailsRuntime.WindowSetAlwaysOnTop(a.Ctx, true)
+	// 	wailsRuntime.WindowSetAlwaysOnTop(a.Ctx, false)
+	// })
+	// fileMenu.AddSeparator()
+	// fileMenu.AddText("Quit", keys.CmdOrCtrl("q"), func(_ *menu.CallbackData) {
+	// 	a.ForceQuit()
+	// 	wailsRuntime.Quit(a.Ctx)
+	// })
+
+	// Create application with options
+	errApp := wails.Run(&options.App{
+		Title:     "Zen Service Watcher",
+		MinWidth:  500,
+		MinHeight: 800,
+		AssetServer: &assetserver.Options{
+			Assets: assets,
 		},
-		Assets: application.AssetOptions{
-			Handler: application.AssetFileServerFS(assets),
+		WindowStartState: options.Normal,
+		DisableResize:    false,
+		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
+		OnStartup:        a.Startup,
+		OnShutdown:       a.Shutdown,
+		Bind: []interface{}{
+			a,
 		},
-		Mac: application.MacOptions{
-			ActivationPolicy: application.ActivationPolicyAccessory,
-			ApplicationShouldTerminateAfterLastWindowClosed: true,
+		// Menu: appMenu,
+		SingleInstanceLock: &options.SingleInstanceLock{
+			UniqueId: uniqueAppID,
+			OnSecondInstanceLaunch: func(secondInstanceData options.SecondInstanceData) {
+				wailsRuntime.WindowUnminimise(a.Ctx)
+				wailsRuntime.WindowShow(a.Ctx)
+				wailsRuntime.WindowSetAlwaysOnTop(a.Ctx, true)
+			},
 		},
-		Windows:  application.WindowsOptions{},
-		Logger:   slog.Default(),
-		LogLevel: slog.LevelDebug,
-	})
+		// OnBeforeClose: func(ctx context.Context) (prevent bool) {
+		// 	if !a.IsQuitting() {
+		// 		slog.Info("User clicked close, hiding window to background")
 
-	systemTray := app.SystemTray.New()
-
-	// Create a new window with the necessary options.
-	// 'Title' is the title of the window.
-	// 'Mac' options tailor the window when running on macOS.
-	// 'BackgroundColour' is the background colour of the window.
-	// 'URL' is the URL that will be loaded into the webview.
-	mainWindow := app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:          "Zen Service Watcher",
-		DisableResize:  false,
-		Hidden:         false,
-		BackgroundType: application.BackgroundTypeTranslucent,
-		Mac: application.MacWindow{
-			InvisibleTitleBarHeight: 50,
-			Backdrop:                application.MacBackdropTranslucent,
-			TitleBar:                application.MacTitleBarHiddenInset,
+		// 		wailsRuntime.WindowHide(ctx)
+		// 		wailsRuntime.EventsEmit(ctx, "notification", "Zen Watcher is running in background")
+		// 		return true
+		// 	}
+		// 	return false
+		// },
+		Windows: &windows.Options{
+			BackdropType:        windows.Mica,
+			EnableSwipeGestures: true,
+			DisableWindowIcon:   false,
+			Theme:               windows.Dark,
 		},
-		Windows: application.WindowsWindow{
-			Theme:                   application.Dark,
-			BackdropType:            application.Mica,
-			WindowMaskDraggable:     true,
-			ResizeDebounceMS:        200,
-			WindowDidMoveDebounceMS: 200,
+		Mac: &mac.Options{
+			TitleBar:            mac.TitleBarHiddenInset(),
+			Appearance:          mac.NSAppearanceNameDarkAqua,
+			WindowIsTranslucent: true,
+			About: &mac.AboutInfo{
+				Title:   "Window Service Watcher",
+				Message: "Monitor your POS services",
+			},
 		},
-		Linux:            application.LinuxWindow{},
-		BackgroundColour: application.NewRGB(27, 38, 54),
-		URL:              "/",
 	})
-
-	if trayIcon != nil {
-		systemTray.SetIcon(trayIcon)
-	}
-	trayMenu := app.NewMenu()
-	trayMenu.Add("Open Dashboard").OnClick(func(_ *application.Context) {
-		mainWindow.Show()
-		mainWindow.Focus()
-	})
-	trayMenu.AddSeparator()
-	trayMenu.Add("Exit").OnClick(func(_ *application.Context) {
-		app.Quit()
-	})
-
-	systemTray.SetMenu(trayMenu)
-	systemTray.OnClick(func() {
-		if mainWindow.IsVisible() {
-			mainWindow.Hide()
-		} else {
-			mainWindow.Show()
-			mainWindow.Focus()
-		}
-	})
-
-	mainWindow.RegisterHook(events.Windows.WindowClosing, func(e *application.WindowEvent) {
-		e.Cancel()
-		mainWindow.Hide()
-
-		app.Dialog.Info().SetTitle("Still Running").SetMessage("Zen Watcher is running in background").Show()
-	})
-
-	// Create a goroutine that emits an event containing the current time every second.
-	// The frontend can listen to this event and update the UI accordingly.
-	go func() {
-		for {
-			now := time.Now().Format(time.RFC1123)
-			app.Event.Emit("time", now)
-			time.Sleep(time.Second)
-		}
-	}()
-
-	// Run the application. This blocks until the application has been exited.
-	errApp := app.Run()
-	// If an error occurred while running the application, log it and exit.
 	if errApp != nil {
-		log.Fatal(errApp)
+		println("Error:", errApp.Error())
 	}
 }

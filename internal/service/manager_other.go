@@ -3,20 +3,27 @@
 package service
 
 import (
-	"context"
-	"sync"
-
 	"window-service-watcher/internal/domain"
 )
 
 type MockManager struct {
-	logCancel context.CancelFunc
-	logMutex  sync.Mutex
+	// logCancel context.CancelFunc
+	// logMutex  sync.Mutex
+}
+
+// GetServiceMetrics implements [domain.ServiceManager].
+func (m *MockManager) GetServiceMetrics(serviceName string) (*domain.ServiceMetrics, error) {
+	return &domain.ServiceMetrics{
+		PID:        1234,
+		CreateTime: 16251588000000,
+		CPUUsage:   2.5,
+		MemUsage:   104857600,
+	}, nil
 }
 
 // GetServiceState implements [domain.ServiceManager].
-func (m *MockManager) GetServiceState(serviceName string) (string, bool, error) {
-	return "Running", true, nil
+func (m *MockManager) GetServiceState(serviceName string) (domain.Status, error) {
+	return domain.RUNNING, nil
 }
 
 // StartService implements [domain.ServiceManager].
@@ -86,15 +93,15 @@ func (m *MockManager) Disconnect() error {
 }
 
 // StopLogWatcher implements [domain.ServiceManager].
-func (m *MockManager) StopLogWatcher() {
-	m.logMutex.Lock()
-	defer m.logMutex.Unlock()
+// func (m *MockManager) StopLogWatcher() {
+// 	m.logMutex.Lock()
+// 	defer m.logMutex.Unlock()
 
-	if m.logCancel != nil {
-		m.logCancel()
-		m.logCancel = nil
-	}
-}
+// 	if m.logCancel != nil {
+// 		m.logCancel()
+// 		m.logCancel = nil
+// 	}
+// }
 
 func NewManager() domain.ServiceManager {
 	return &MockManager{}

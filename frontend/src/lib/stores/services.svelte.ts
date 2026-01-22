@@ -1,166 +1,157 @@
+import { SvelteMap } from 'svelte/reactivity';
 import {
 	GetConfig,
 	StartService,
-	StopService
-} from '../../../bindings/window-service-watcher/internal/app/app';
-import { Events } from '@wailsio/runtime';
+	StopService,
+	OpenExplorer,
+	InstallService
+} from '../../../wailsjs/go/app/App';
+import { domain } from '../../../wailsjs/go/models';
+import { EventsOn } from '../../../wailsjs/runtime';
 
-export type ServiceStatus = 'running' | 'stopped' | 'error' | 'starting' | 'stopping';
+export enum Status {
+	ERROR = 0,
+	STOPPED = 1,
+	START_PENDING = 2,
+	STOP_PENDING = 3,
+	RUNNING = 4,
+	CONTINUE_PENDING = 5,
+	PAUSE_PENDING = 6,
+	PAUSED = 7
+}
+
+export interface ServiceMetrics {
+	pid: number;
+	createTime: number;
+	cpu: number;
+	mem: number;
+}
+
+export interface ServiceStatus {
+	id: string;
+	status: Status;
+	metrics?: ServiceMetrics;
+}
 
 export interface ServiceData {
 	id: string;
 	name: string;
 	description: string;
-	status: ServiceStatus;
-	logsUrl: string | null;
+	status: Status;
+	installable: boolean;
+	metrics?: ServiceMetrics;
 }
 
 export class Service {
 	id: string;
 	name: string;
 	description: string;
-	logsUrl: string | null;
+	installable: boolean = false;
 
-	status = $state<ServiceStatus>('stopped');
+	status = $state<Status>(Status.STOPPED);
+	metrics = $state<ServiceMetrics>({
+		pid: 0,
+		createTime: 0,
+		cpu: 0,
+		mem: 0
+	});
+	loading = $state<boolean>(true);
 
-	constructor(data: ServiceData) {
-		this.id = data.id;
-		this.name = data.name;
-		this.description = data.description;
+	constructor(config: ServiceData) {
+		this.id = config.id;
+		this.name = config.name;
+		this.description = config.description;
+		this.installable = config.installable;
+
+		if (config.metrics) {
+			this.metrics = config.metrics;
+		}
+	}
+
+	update(data: ServiceStatus) {
 		this.status = data.status;
-		this.logsUrl = data.logsUrl;
-	}
+		if (data.metrics) {
+			this.metrics = data.metrics;
+		}
 
-	listen(id: string) {
-		Events.On('service-update-' + id, ({ data }) => {
-			this.status = this.#mapBackendStatus(data);
-		});
-	}
-
-	#mapBackendStatus(backendStatus: string): ServiceStatus {
-		const statusMap: Record<string, ServiceStatus> = {
-			Running: 'running',
-			Stopped: 'stopped',
-			Starting: 'starting',
-			Stopping: 'stopping',
-			Error: 'error',
-			'Not Found': 'error',
-			Unknown: 'error',
-			Paused: 'stopped',
-			Pausing: 'stopping',
-			Resuming: 'starting'
-		};
-		return statusMap[backendStatus] || 'error';
+		if (this.loading && [Status.RUNNING, Status.STOPPED].includes(data.status)) {
+			this.loading = false;
+		}
 	}
 
 	async start() {
-		if (['running', 'starting'].includes(this.status)) return;
-		this.status = 'starting';
-
-		try {
-			await StartService(this.id);
-		} catch (err) {
-			console.error(`Error starting service ${this.id}:`, err);
-			this.status = 'error';
-		}
+		this.loading = true;
+		await StartService(this.id);
 	}
 
 	async stop() {
-		if (['stopped', 'stopping'].includes(this.status)) return;
-		this.status = 'stopping';
-
-		try {
-			await StopService(this.id);
-		} catch (err) {
-			console.error(`Error stopping service ${this.id}:`, err);
-			this.status = 'error';
-		}
+		this.loading = true;
+		await StopService(this.id).then(() => {
+			this.metrics = {
+				pid: 0,
+				createTime: 0,
+				cpu: 0,
+				mem: 0
+			};
+		});
 	}
 
-	async restart() {
-		await this.stop();
-		await new Promise((resolve) => setTimeout(resolve, 1000));
-		await this.start();
+	async openExplorer() {
+		await OpenExplorer(this.id);
+	}
+
+	async install(files: domain.InstallFileDTO[]) {
+		await InstallService(this.id, files);
 	}
 }
 
 export class ServiceStore {
-	services = $state<Service[]>([]);
-	isLoading = $state<boolean>(true);
+	private _services = new SvelteMap<string, Service>();
+	services = $derived(Array.from(this._services.values()));
 
-	healthyCount = $derived(() => this.services.filter((s) => s.status === 'running').length);
-	totalCount = $derived(() => this.services.length);
+	totalCount = $derived(this.services.length);
+	runningCount = $derived(
+		this.services.filter((service) => service.status === Status.RUNNING).length
+	);
+	stoppedCount = $derived(
+		this.services.filter((service) => service.status === Status.STOPPED).length
+	);
+
+	initialized = $state<boolean>(false);
 
 	async init() {
+		if (this.initialized) return;
 		try {
-			await new Promise((resolve) => setTimeout(resolve, 500));
-
 			const configs = await GetConfig();
+			console.log('Loaded config in ServiceStore:', configs);
 
-			configs.Services.forEach((config) => {
-				const service = new Service({
-					id: config.id,
-					name: config.name || 'Unknown',
-					description: config.description || 'No description provided.',
-					status: 'stopped',
-					logsUrl: config.log_path ? `file://${config.log_path}` : null
-				});
-
-				service.listen(config.id);
-				this.services.push(service);
+			const sMap = new SvelteMap<string, Service>();
+			configs.services.forEach((config) => {
+				sMap.set(
+					config.id,
+					new Service({
+						id: config.id,
+						name: config.name,
+						description: config.description,
+						installable: config.installable,
+						status: Status.STOPPED
+					})
+				);
 			});
+			this._services = sMap;
+			this.initialized = true;
 
-			this.isLoading = false;
+			EventsOn(`services-update`, (updates: ServiceStatus[]) => {
+				updates.forEach((update) => {
+					const service = this._services.get(update.id);
+					if (service) {
+						service.update(update);
+					}
+				});
+			});
 		} catch (err) {
 			console.error('Error loading config in ServiceStore:', err);
 		}
-	}
-
-	#getMockData(): ServiceData[] {
-		return [
-			{
-				id: '1',
-				name: 'Auth Service',
-				description: 'Auth provider',
-				status: 'running',
-				logsUrl: 'http://localhost:8080/logs'
-			},
-			{
-				id: '2',
-				name: 'Payment Gateway',
-				description: 'Payment processing',
-				status: 'running',
-				logsUrl: null
-			},
-			{
-				id: '3',
-				name: 'Email Worker',
-				description: 'Email jobs',
-				status: 'stopped',
-				logsUrl: 'http://localhost:8082/logs'
-			},
-			{
-				id: '4',
-				name: 'Data Aggregator',
-				description: 'Data stats',
-				status: 'error',
-				logsUrl: 'http://localhost:8083/logs'
-			},
-			{
-				id: '5',
-				name: 'Notification Svc',
-				description: 'Push notifications',
-				status: 'running',
-				logsUrl: null
-			},
-			{
-				id: '6',
-				name: 'Legacy API',
-				description: 'Old PHP backend',
-				status: 'stopped',
-				logsUrl: null
-			}
-		];
 	}
 }
 

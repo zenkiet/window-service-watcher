@@ -29,6 +29,7 @@
 			radial-gradient(at 100% 100%, rgba(59, 130, 246, 0.1) 0px, transparent 50%),
 			radial-gradient(at 0% 100%, rgba(139, 92, 246, 0.1) 0px, transparent 50%);
 		background-attachment: fixed;
+		--wails-draggable: drag;
 		/* @apply m-0 min-h-screen antialiased;
 		background: var(--page-bg);
 		color: var(--text);
@@ -50,16 +51,24 @@
 }
 
 /* Scrollbar */
-::-webkit-scrollbar {
+.scrollable::-webkit-scrollbar {
 	width: 8px;
 }
 
-::-webkit-scrollbar-track {
+.scrollable::-webkit-scrollbar-track {
 	background: transparent;
 }
 
-::-webkit-scrollbar-thumb {
-	@apply rounded-full bg-white/10 hover:bg-white/20;
+.scrollable::-webkit-scrollbar-thumb {
+	background-color: #404040;
+	/* Neutral-700 */
+	border-radius: 4px;
+	border: 2px solid transparent;
+	background-clip: content-box;
+}
+
+.scrollable::-webkit-scrollbar-thumb:hover {
+	background-color: #525252;
 }
 
 /* ===== Components ===== */
@@ -194,5 +203,3 @@
 		}
 	}
 } */
-
-

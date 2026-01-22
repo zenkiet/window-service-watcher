@@ -3,19 +3,22 @@ package app
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 
 	"window-service-watcher/internal/domain"
 
-	"github.com/wailsapp/wails/v3/pkg/application"
+	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 type App struct {
+	Ctx     context.Context
 	cfg     domain.Config
 	mgr     domain.ServiceManager
 	svcMap  map[string]domain.ServiceConfig
 	watcher *ServiceWatcher
-
-	cancelWatch context.CancelFunc
 }
 
 func NewApp(cfg domain.Config, mgr domain.ServiceManager) *App {
@@ -32,31 +35,29 @@ func NewApp(cfg domain.Config, mgr domain.ServiceManager) *App {
 	}
 }
 
-func (a *App) OnStartup(ctx context.Context, options application.ServiceOptions) error {
+func (a *App) Startup(ctx context.Context) {
+	a.Ctx = ctx
+
 	if err := a.mgr.Connect(); err != nil {
-		application.Get().Logger.Error("Service Manager Connect Error: " + err.Error())
-		return err
+		wailsRuntime.LogError(a.Ctx, "Service Manager Connect Error: "+err.Error())
+		return
 	}
 
-	watchCtx, cancel := context.WithCancel(context.Background())
-	a.cancelWatch = cancel
-
-	go a.watcher.Start(watchCtx)
+	go a.watcher.Start(ctx)
 
 	go func() {
-		for static := range a.watcher.Updates() {
-			application.Get().Event.Emit("service-update-"+static.ID, static)
-			application.Get().Logger.Info("Service Update: " + static.ID + " Status: " + static.Status)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case updates := <-a.watcher.Updates():
+				wailsRuntime.EventsEmit(a.Ctx, "services-update", updates)
+			}
 		}
 	}()
-
-	return nil
 }
 
 func (a *App) Shutdown(ctx context.Context) {
-	if a.cancelWatch != nil {
-		a.cancelWatch()
-	}
 	a.mgr.Disconnect()
 }
 
@@ -66,17 +67,10 @@ func (a *App) GetConfig() domain.Config {
 
 func (a *App) StartService(id string) error {
 	cfg, ok := a.svcMap[id]
-	application.Get().Logger.Info("Starting Service: " + cfg.ServiceName)
 	if !ok {
 		return fmt.Errorf("service config not found for ID: %s", id)
 	}
-
-	err := a.mgr.StartService(cfg.ServiceName)
-	if err != nil {
-		application.Get().Logger.Error("Start Service Error: " + err.Error())
-		return err
-	}
-	return nil
+	return a.mgr.StartService(cfg.ServiceName)
 }
 
 func (a *App) StopService(id string) error {
@@ -84,31 +78,91 @@ func (a *App) StopService(id string) error {
 	if !ok {
 		return fmt.Errorf("service config not found for ID: %s", id)
 	}
+	return a.mgr.StopService(cfg.ServiceName)
+}
 
-	err := a.mgr.StopService(cfg.ServiceName)
+func (a *App) GetServiceStatus(id string) (domain.Status, error) {
+	cfg, ok := a.svcMap[id]
+	if !ok {
+		return domain.STOPPED, fmt.Errorf("service config not found for ID: %s", id)
+	}
+	return a.mgr.GetServiceState(cfg.ServiceName)
+}
+
+func (a *App) OpenExplorer(id string) error {
+	cfg, ok := a.svcMap[id]
+	if !ok {
+		return fmt.Errorf("service config not found for ID: %s", id)
+	}
+
+	targetPath := filepath.Clean(os.ExpandEnv(cfg.Path))
+	info, err := os.Stat(targetPath)
 	if err != nil {
-		application.Get().Logger.Error("Stop Service Error: " + err.Error())
-		return err
+		return fmt.Errorf("service path error: %w", err)
+	}
+
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		if !info.IsDir() {
+			cmd = exec.Command("explorer", "/select,", targetPath)
+		} else {
+			cmd = exec.Command("explorer", targetPath)
+		}
+	case "darwin":
+		cmd = exec.Command("open", targetPath)
+	default:
+		dir := targetPath
+		if !info.IsDir() {
+			dir = filepath.Dir(targetPath)
+		}
+		cmd = exec.Command("xdg-open", dir)
+	}
+
+	return cmd.Start()
+}
+
+func (a *App) InstallService(id string, files []domain.InstallFileDTO) error {
+	cfg, ok := a.svcMap[id]
+	if !ok {
+		return fmt.Errorf("service config not found for ID: %s", id)
+	}
+
+	serviceName := cfg.ServiceName
+	targetPath := filepath.Clean(os.ExpandEnv(cfg.Path))
+
+	wailsRuntime.LogInfo(a.Ctx, "Installing service files to: "+targetPath)
+
+	// Stop service if running
+	status, err := a.mgr.GetServiceState(serviceName)
+	if err != nil {
+		return fmt.Errorf("failed to get service state: %w", err)
+	}
+	if status == domain.RUNNING {
+		wailsRuntime.LogInfo(a.Ctx, "Stopping service before installation: "+serviceName)
+		if err := a.mgr.StopService(serviceName); err != nil {
+			return fmt.Errorf("failed to stop service: %w", err)
+		}
+	}
+
+	if err := os.MkdirAll(targetPath, 0755); err != nil {
+		return fmt.Errorf("failed to create service directory: %w", err)
+	}
+
+	for _, file := range files {
+		filePath := filepath.Join(targetPath, file.Name)
+		wailsRuntime.LogInfo(a.Ctx, "Writing file: "+filePath)
+		if err := os.WriteFile(filePath, file.Data, 0755); err != nil {
+			return fmt.Errorf("failed to write file %s: %w", file.Name, err)
+		}
+	}
+
+	wailsRuntime.LogInfo(a.Ctx, "Service files installed for: "+serviceName)
+
+	// Start service after installation
+	wailsRuntime.LogInfo(a.Ctx, "Starting service after installation: "+serviceName)
+	if err := a.mgr.StartService(serviceName); err != nil {
+		return fmt.Errorf("failed to start service: %w", err)
 	}
 	return nil
 }
-
-// func (a *App) GetServiceStatus() (domain.ServiceStatus, error) {
-// 	status, err := a.manager.CheckStatus()
-// 	if err != nil {
-// 		application.Get().Logger.Error("Check Status Error: " + err.Error())
-// 		return domain.ServiceStatus{
-// 			Status:    "Error",
-// 			IsHealthy: false,
-// 		}, err
-// 	}
-// 	return status, nil
-// }
-
-// func (a *App) WatchLogs(filePath string) {
-// 	a.manager.StartLogWatcher(filePath, func(line string) {
-// 		application.Get().Event.Emit("new-log", line)
-// 	}, func(err error) {
-// 		application.Get().Event.Emit("log-error", err.Error())
-// 	})
-// }

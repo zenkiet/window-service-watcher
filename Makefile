@@ -8,7 +8,7 @@ all: build
 
 deps:
 	@echo " > Installing dependencies..."
-	go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+	go install github.com/wailsapp/wails/v2/cmd/wails@latest
 	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.8.0
 	go install mvdan.cc/gofumpt@latest
 	go install golang.org/x/tools/cmd/goimports@latest
@@ -19,11 +19,11 @@ deps:
 
 dev:
 	@echo " > Starting development server..."
-	wails3 dev
+	wails dev
 
 build-window:
 	@echo " > Building on window"
-	wails3 build -platform windows/amd64 -nsis
+	wails build -platform windows/amd64 -nsis
 
 format:
 	@echo " > Formatting code..."

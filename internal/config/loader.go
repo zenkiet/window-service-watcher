@@ -18,7 +18,8 @@ func DefaultConfig() domain.Config {
 				Name:        "Blogic Report Service",
 				Description: "Generates and manages reports for Blogic applications.",
 				ServiceName: "BlogicReportService",
-				LogPath:     "C:\\ProgramData\\Blogic\\logs\\report.log",
+				Path:        "C:\\Program Files (x86)\\BLogic Systems\\BLogic Service\\BLogicReportService",
+				Installable: true,
 			},
 		},
 	}
