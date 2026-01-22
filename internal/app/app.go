@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 
 	"window-service-watcher/internal/domain"
 
@@ -9,23 +10,30 @@ import (
 )
 
 type App struct {
-	config  domain.Config
-	manager domain.ServiceManager
+	cfg     domain.Config
+	mgr     domain.ServiceManager
+	svcMap  map[string]domain.ServiceConfig
 	watcher *ServiceWatcher
 
 	cancelWatch context.CancelFunc
 }
 
 func NewApp(cfg domain.Config, mgr domain.ServiceManager) *App {
+	sMap := make(map[string]domain.ServiceConfig)
+	for _, svc := range cfg.Services {
+		sMap[svc.ID] = svc
+	}
+
 	return &App{
-		config:  cfg,
-		manager: mgr,
+		cfg:     cfg,
+		mgr:     mgr,
+		svcMap:  sMap,
 		watcher: NewServiceWatcher(cfg, mgr),
 	}
 }
 
 func (a *App) OnStartup(ctx context.Context, options application.ServiceOptions) error {
-	if err := a.manager.Connect(); err != nil {
+	if err := a.mgr.Connect(); err != nil {
 		application.Get().Logger.Error("Service Manager Connect Error: " + err.Error())
 		return err
 	}
@@ -33,9 +41,12 @@ func (a *App) OnStartup(ctx context.Context, options application.ServiceOptions)
 	watchCtx, cancel := context.WithCancel(context.Background())
 	a.cancelWatch = cancel
 
+	go a.watcher.Start(watchCtx)
+
 	go func() {
-		if err := a.watcher.Start(watchCtx); err != nil {
-			application.Get().Logger.Error("Service Watcher Start Error: " + err.Error())
+		for static := range a.watcher.Updates() {
+			application.Get().Event.Emit("service-update-"+static.ID, static)
+			application.Get().Logger.Info("Service Update: " + static.ID + " Status: " + static.Status)
 		}
 	}()
 
@@ -46,20 +57,21 @@ func (a *App) Shutdown(ctx context.Context) {
 	if a.cancelWatch != nil {
 		a.cancelWatch()
 	}
-	a.manager.Disconnect()
+	a.mgr.Disconnect()
 }
 
 func (a *App) GetConfig() domain.Config {
-	return a.config
+	return a.cfg
 }
 
 func (a *App) StartService(id string) error {
-	cgf, ok := a.findConfigByID(id)
+	cfg, ok := a.svcMap[id]
+	application.Get().Logger.Info("Starting Service: " + cfg.ServiceName)
 	if !ok {
-		return context.DeadlineExceeded
+		return fmt.Errorf("service config not found for ID: %s", id)
 	}
 
-	err := a.manager.StartService(cgf.ServiceName)
+	err := a.mgr.StartService(cfg.ServiceName)
 	if err != nil {
 		application.Get().Logger.Error("Start Service Error: " + err.Error())
 		return err
@@ -68,40 +80,17 @@ func (a *App) StartService(id string) error {
 }
 
 func (a *App) StopService(id string) error {
-	cgf, ok := a.findConfigByID(id)
+	cfg, ok := a.svcMap[id]
 	if !ok {
-		return context.DeadlineExceeded
+		return fmt.Errorf("service config not found for ID: %s", id)
 	}
 
-	err := a.manager.StopService(cgf.ServiceName)
+	err := a.mgr.StopService(cfg.ServiceName)
 	if err != nil {
 		application.Get().Logger.Error("Stop Service Error: " + err.Error())
 		return err
 	}
 	return nil
-}
-
-func (a *App) RestartService(id string) error {
-	cgf, ok := a.findConfigByID(id)
-	if !ok {
-		return context.DeadlineExceeded
-	}
-
-	err := a.manager.RestartService(cgf.ServiceName)
-	if err != nil {
-		application.Get().Logger.Error("Restart Service Error: " + err.Error())
-		return err
-	}
-	return nil
-}
-
-func (a *App) findConfigByID(id string) (domain.ServiceConfig, bool) {
-	for _, cfg := range a.config.Services {
-		if cfg.ID == id {
-			return cfg, true
-		}
-	}
-	return domain.ServiceConfig{}, false
 }
 
 // func (a *App) GetServiceStatus() (domain.ServiceStatus, error) {

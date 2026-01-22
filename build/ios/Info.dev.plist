@@ -5,7 +5,7 @@
     <key>CFBundleExecutable</key>
     <string>wails3</string>
     <key>CFBundleIdentifier</key>
-    <string>com.example.wails3.dev</string>
+    <string>com.zensoftware.zwatcher.dev</string>
     <key>CFBundleName</key>
     <string>My Product (Dev)</string>
     <key>CFBundleDisplayName</key>
@@ -50,13 +50,13 @@
     <!-- Development mode enabled -->
     <key>WailsDevelopmentMode</key>
     <true/>
-    
+
     <key>NSHumanReadableCopyright</key>
     <string>© 2026, My Company</string>
-    
-    
+
+
     <key>CFBundleGetInfoString</key>
     <string>This is a comment</string>
-    
+
 </dict>
 </plist>

@@ -21,16 +21,16 @@
         PackageDescription="A wails3 application">
         <Capabilities>
             <Capability Name="runFullTrust" />
-            
+
         </Capabilities>
         <Applications>
             <Application
-                Id="com.example.wails3"
+                Id="com.zensoftware.zwatcher"
                 Description="A wails3 application"
                 DisplayName="My Product"
                 ExecutableName="wails3"
                 EntryPoint="Windows.FullTrustApplication">
-                
+
             </Application>
         </Applications>
         <Resources>

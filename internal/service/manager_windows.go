@@ -1,6 +1,6 @@
 //go:build windows
 
-package windows
+package service
 
 import (
 	"fmt"
@@ -15,18 +15,32 @@ type WindowsManager struct {
 }
 
 // CheckStatus implements [domain.ServiceManager].
-func (w *WindowsManager) CheckStatus() (domain.ServiceStatus, error) {
-	panic("unimplemented")
-}
+// func (w *WindowsManager) CheckStatus() (domain.ServiceStatus, error) {
+// }
 
 // Connect implements [domain.ServiceManager].
 func (w *WindowsManager) Connect() error {
-	panic("unimplemented")
+	if w.mgr != nil {
+		return nil
+	}
+
+	m, err := mgr.Connect()
+	if err != nil {
+		return fmt.Errorf("failed to connect to service manager: %w", err)
+	}
+	w.mgr = m
+	return nil
 }
 
 // Disconnect implements [domain.ServiceManager].
 func (w *WindowsManager) Disconnect() error {
-	panic("unimplemented")
+	if w.mgr == nil {
+		return nil
+	}
+
+	err := w.mgr.Disconnect()
+	w.mgr = nil
+	return err
 }
 
 // GetServiceState implements [domain.ServiceManager].
@@ -72,26 +86,16 @@ func (w *WindowsManager) GetServiceState(serviceName string) (string, bool, erro
 	return state, isHealthy, nil
 }
 
-// RestartService implements [domain.ServiceManager].
-func (w *WindowsManager) RestartService(serviceName string) error {
-	err := w.StopService(serviceName)
-	if err != nil {
-		return fmt.Errorf("could not stop service: %w", err)
-	}
-	err = w.StartService(serviceName)
-	if err != nil {
-		return fmt.Errorf("could not start service: %w", err)
-	}
-	return nil
-}
-
 // StartLogWatcher implements [domain.ServiceManager].
-func (w *WindowsManager) StartLogWatcher(filePath string, onLog func(string), onError func(error)) {
-	panic("unimplemented")
-}
+// func (w *WindowsManager) StartLogWatcher(filePath string, onLog func(string), onError func(error)) {
+// }
 
 // StartService implements [domain.ServiceManager].
 func (w *WindowsManager) StartService(serviceName string) error {
+	if w.mgr == nil {
+		return fmt.Errorf("service manager not connected")
+	}
+
 	s, err := w.mgr.OpenService(serviceName)
 	if err != nil {
 		return fmt.Errorf("could not access service: %w", err)
@@ -101,12 +105,15 @@ func (w *WindowsManager) StartService(serviceName string) error {
 }
 
 // StopLogWatcher implements [domain.ServiceManager].
-func (w *WindowsManager) StopLogWatcher() {
-	panic("unimplemented")
-}
+// func (w *WindowsManager) StopLogWatcher() {
+// }
 
 // StopService implements [domain.ServiceManager].
 func (w *WindowsManager) StopService(serviceName string) error {
+	if w.mgr == nil {
+		return fmt.Errorf("service manager not connected")
+	}
+
 	s, err := w.mgr.OpenService(serviceName)
 	if err != nil {
 		return fmt.Errorf("could not access service: %w", err)

@@ -31,14 +31,6 @@ export function OnStartup(options) {
 }
 
 /**
- * @param {string} id
- * @returns {$CancellablePromise<void>}
- */
-export function RestartService(id) {
-    return $Call.ByID(1495361373, id);
-}
-
-/**
  * @returns {$CancellablePromise<void>}
  */
 export function Shutdown() {

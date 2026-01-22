@@ -15,7 +15,6 @@ type ServiceManager interface {
 
 	StartService(serviceName string) error
 	StopService(serviceName string) error
-	RestartService(serviceName string) error
 
 	// StartLogWatcher(filePath string, onLog func(string), onError func(error))
 	// StopLogWatcher()

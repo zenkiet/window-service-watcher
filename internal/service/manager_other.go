@@ -19,19 +19,14 @@ func (m *MockManager) GetServiceState(serviceName string) (string, bool, error) 
 	return "Running", true, nil
 }
 
-// RestartService implements [domain.ServiceManager].
-func (m *MockManager) RestartService(serviceName string) error {
-	panic("unimplemented")
-}
-
 // StartService implements [domain.ServiceManager].
 func (m *MockManager) StartService(serviceName string) error {
-	panic("unimplemented")
+	return nil
 }
 
 // StopService implements [domain.ServiceManager].
 func (m *MockManager) StopService(serviceName string) error {
-	panic("unimplemented")
+	return nil
 }
 
 // StartLogWatcher implements [domain.ServiceManager].

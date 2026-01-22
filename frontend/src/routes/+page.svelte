@@ -9,7 +9,7 @@
 	<!-- Header -->
 	<div class="mb-8 flex flex-col gap-6">
 		<div class="flex items-center justify-between">
-			<h1 class="text-3xl font-bold tracking-tight text-white">Blogic Systems Watcher</h1>
+			<h1 class="text-3xl font-bold tracking-tight text-white">Zen Service Watcher</h1>
 
 			<a href="/settings" class="glass-btn group h-10 w-10 rounded-lg p-0!" title="Settings">
 				<i class="icon-[duotone--gear] size-4.5 text-white/40 transition-all duration-500 group-hover:rotate-90 group-hover:text-white "></i>

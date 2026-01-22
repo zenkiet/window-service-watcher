@@ -5,7 +5,7 @@
     <key>CFBundleExecutable</key>
     <string>wails3</string>
     <key>CFBundleIdentifier</key>
-    <string>com.example.wails3</string>
+    <string>com.zensoftware.zwatcher</string>
     <key>CFBundleName</key>
     <string>My Product</string>
     <key>CFBundleDisplayName</key>
@@ -47,13 +47,13 @@
         <key>NSAllowsLocalNetworking</key>
         <true/>
     </dict>
-    
+
     <key>NSHumanReadableCopyright</key>
     <string>© 2026, My Company</string>
-    
-    
+
+
     <key>CFBundleGetInfoString</key>
     <string>This is a comment</string>
-    
+
 </dict>
 </plist>

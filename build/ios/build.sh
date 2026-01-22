@@ -3,7 +3,7 @@ set -e
 
 # Build configuration
 APP_NAME="wails3"
-BUNDLE_ID="com.example.wails3"
+BUNDLE_ID="com.zensoftware.zwatcher"
 VERSION="0.1.0"
 BUILD_NUMBER="0.1.0"
 BUILD_DIR="build/ios"
