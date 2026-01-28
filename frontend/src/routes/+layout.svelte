@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Footer from '$lib/components/Footer.svelte';
+	import ThemeToggle from '$lib/components/layout/ThemeToggle.svelte';
 	import UpdateModal from '$lib/components/modals/UpdateModal.svelte';
 	import { serviceStore } from '$lib/stores/services.svelte';
 	import { systemStore } from '$lib/stores/system.svelte';
@@ -10,7 +11,7 @@
 	systemStore.init();
 </script>
 
-<div class="flex h-screen w-screen flex-col overflow-hidden selection:bg-blue-500/30 pt-5">
+<div class="flex h-screen w-screen flex-col overflow-hidden selection:bg-blue-500/30">
 	<main class="relative flex-1 overflow-hidden">
 		{#if serviceStore.initialized}
 			{@render children()}
@@ -27,4 +28,6 @@
 	<Footer />
 
 	<UpdateModal />
+
+	<ThemeToggle />
 </div>
